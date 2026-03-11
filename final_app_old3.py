@@ -418,123 +418,45 @@ if wav_base64:
             window_length=0
         )
 
-        # ✅ Rendu matplotlib → base64 PNG pour l'afficher dans components.html
-        #    (iframe = contrôle total sur touch-action → zoom pinch Android garanti)
-        import io
-        fig, ax = plt.subplots(figsize=(10, 4))
-        fig.patch.set_facecolor('#1a1a1a')
-        ax.set_facecolor('#1a1a1a')
-
-        ax.fill_between(times_final, debits_final, alpha=0.25, color="steelblue")
-        ax.plot(times_final, debits_final, color="steelblue", linewidth=2, label="Débit (mL/s)")
-        ax.axhline(
-            metrics["debit_max_mL_s"], color="red", linestyle="--",
-            linewidth=1, label=f"Qmax = {metrics['debit_max_mL_s']} mL/s"
-        )
-        ax.set_xlabel("Temps (s)", color="white")
-        ax.set_ylabel("Débit (mL/s)", color="white")
-        ax.set_title("Uroflowmétrie acoustique", color="white")
-        ax.legend(facecolor="#2a2a2a", labelcolor="white")
-        ax.grid(True, alpha=0.3)
-        ax.tick_params(colors="white")
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#444")
-        textstr = (
-            f"Qmax  = {metrics['debit_max_mL_s']} mL/s\n"
-            f"T mic = {metrics['duree_s']} s\n"
-            f"Vol   = {metrics['volume_total_mL']} mL"
-        )
-        ax.text(
-            0.98, 0.95, textstr, transform=ax.transAxes,
-            verticalalignment="top", horizontalalignment="right",
-            bbox=dict(boxstyle="round", facecolor="#2a2a2a", alpha=0.9, edgecolor="#555"),
-            fontsize=9, family="monospace", color="white"
-        )
-        plt.tight_layout()
-
-        # Sauvegarde en mémoire → base64
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", dpi=150)
-        plt.close(fig)
-        buf.seek(0)
-        img_b64 = base64.b64encode(buf.read()).decode("utf-8")
-
-        # ✅ Remplace "Analyse en cours" par le graphique dans components.html
-        #    → iframe indépendante de Streamlit → pinch-zoom natif Android
+        # ✅ Remplace "Analyse en cours" par le graphique dès que prêt
         with graph_placeholder.container():
-            components.html(f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0,
-      user-scalable=yes, minimum-scale=1.0, maximum-scale=10.0">
-<style>
-  * {{ margin:0; padding:0; box-sizing:border-box; touch-action: auto; }}
-  body {{ background:#0e0e0e; display:flex; flex-direction:column;
-          align-items:center; padding:8px; }}
-  #hint {{ color:#555; font-size:0.75rem; margin-bottom:4px;
-           font-family:Arial,sans-serif; }}
-  #wrap {{ overflow:hidden; width:100%; cursor:grab; }}
-  img   {{ width:100%; display:block; transform-origin:0 0;
-           touch-action: pinch-zoom; }}
-</style>
-</head>
-<body>
-<p id="hint">👌 Pincez pour zoomer</p>
-<div id="wrap"><img id="graph" src="data:image/png;base64,{img_b64}"></div>
-<script>
-var img   = document.getElementById('graph');
-var wrap  = document.getElementById('wrap');
-var scale = 1, lastScale = 1;
-var originX = 0, originY = 0;
-var startDist = 0;
+            fig, ax = plt.subplots(figsize=(10, 4))
+            fig.patch.set_facecolor('#1a1a1a')
+            ax.set_facecolor('#1a1a1a')
 
-function dist(t) {{
-  var dx = t[0].clientX - t[1].clientX;
-  var dy = t[0].clientY - t[1].clientY;
-  return Math.sqrt(dx*dx + dy*dy);
-}}
-function midpoint(t) {{
-  return {{
-    x: (t[0].clientX + t[1].clientX) / 2,
-    y: (t[0].clientY + t[1].clientY) / 2
-  }};
-}}
+            ax.fill_between(times_final, debits_final, alpha=0.25, color="steelblue")
+            ax.plot(times_final, debits_final, color="steelblue", linewidth=2, label="Débit (mL/s)")
+            ax.axhline(
+                metrics["debit_max_mL_s"], color="red", linestyle="--",
+                linewidth=1, label=f"Qmax = {metrics['debit_max_mL_s']} mL/s"
+            )
 
-img.addEventListener('touchstart', function(e) {{
-  if (e.touches.length === 2) {{
-    e.preventDefault();
-    startDist  = dist(e.touches);
-    lastScale  = scale;
-    var mid    = midpoint(e.touches);
-    var rect   = img.getBoundingClientRect();
-    originX    = mid.x - rect.left;
-    originY    = mid.y - rect.top;
-  }}
-}}, {{ passive: false }});
+            ax.set_xlabel("Temps (s)", color="white")
+            ax.set_ylabel("Débit (mL/s)", color="white")
+            ax.set_title("Uroflowmétrie acoustique", color="white")
+            ax.legend(facecolor="#2a2a2a", labelcolor="white")
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(colors="white")
+            for spine in ax.spines.values():
+                spine.set_edgecolor("#444")
 
-img.addEventListener('touchmove', function(e) {{
-  if (e.touches.length === 2) {{
-    e.preventDefault();
-    var newDist = dist(e.touches);
-    scale = Math.min(Math.max(lastScale * (newDist / startDist), 1), 8);
-    img.style.transformOrigin = originX + 'px ' + originY + 'px';
-    img.style.transform = 'scale(' + scale + ')';
-  }}
-}}, {{ passive: false }});
+            textstr = (
+                f"Qmax  = {metrics['debit_max_mL_s']} mL/s\n"
+                f"T mic = {metrics['duree_s']} s\n"
+                f"Vol   = {metrics['volume_total_mL']} mL"
+            )
+            ax.text(
+                0.98, 0.95, textstr, transform=ax.transAxes,
+                verticalalignment="top", horizontalalignment="right",
+                bbox=dict(boxstyle="round", facecolor="#2a2a2a", alpha=0.9, edgecolor="#555"),
+                fontsize=9, family="monospace", color="white"
+            )
 
-img.addEventListener('touchend', function(e) {{
-  if (scale < 1.05) {{
-    scale = 1;
-    img.style.transform = 'scale(1)';
-  }}
-}});
-</script>
-</body>
-</html>
-""", height=360)
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
 
-            # ── Métriques sous le graphique ────────────────────────────────────
+            # ── Métriques ─────────────────────────────────────────────────────
             col1, col2, col3 = st.columns(3)
             col1.metric("⚡ Qmax",   f"{metrics['debit_max_mL_s']} mL/s")
             col2.metric("⏱️ Durée",  f"{metrics['duree_s']} s")
