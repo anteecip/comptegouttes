@@ -462,79 +462,127 @@ if wav_base64:
         # ✅ Remplace "Analyse en cours" par le graphique dans components.html
         #    → iframe indépendante de Streamlit → pinch-zoom natif Android
         with graph_placeholder.container():
-            components.html(f"""
-<!DOCTYPE html>
+            components.html(f"""<!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0,
-      user-scalable=yes, minimum-scale=1.0, maximum-scale=10.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=10.0">
 <style>
-  * {{ margin:0; padding:0; box-sizing:border-box; touch-action: auto; }}
-  body {{ background:#0e0e0e; display:flex; flex-direction:column;
-          align-items:center; padding:8px; }}
-  #hint {{ color:#555; font-size:0.75rem; margin-bottom:4px;
-           font-family:Arial,sans-serif; }}
-  #wrap {{ overflow:hidden; width:100%; cursor:grab; }}
-  img   {{ width:100%; display:block; transform-origin:0 0;
-           touch-action: pinch-zoom; }}
+  * {{ margin:0; padding:0; box-sizing:border-box; touch-action: none; }}
+  body {{ background:#0e0e0e; display:flex; flex-direction:column; align-items:center; padding:8px; font-family:Arial,sans-serif; }}
+  #topbar {{ display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:4px; }}
+  #hint {{ color:#666; font-size:0.75rem; }}
+  #reset {{ background:#333; color:#fff; border:1px solid #555; border-radius:6px; padding:4px 10px; font-size:0.75rem; cursor:pointer; display:none; }}
+  #wrap {{ overflow:hidden; width:100%; position:relative; background:#0e0e0e; }}
+  img {{ width:100%; display:block; transform-origin:0 0; user-select:none; will-change:transform; }}
 </style>
 </head>
 <body>
-<p id="hint">👌 Pincez pour zoomer</p>
-<div id="wrap"><img id="graph" src="data:image/png;base64,{img_b64}"></div>
+<div id="topbar">
+  <span id="hint">👌 Pincez · 1 doigt pour déplacer · 2x tap reset</span>
+  <button id="reset" onclick="resetZoom()">↩ Reset</button>
+</div>
+<div id="wrap"><img id="graph" src="data:image/png;base64,{img_b64}" draggable="false"></div>
 <script>
-var img   = document.getElementById('graph');
-var wrap  = document.getElementById('wrap');
-var scale = 1, lastScale = 1;
-var originX = 0, originY = 0;
-var startDist = 0;
+var img = document.getElementById('graph');
+var wrap = document.getElementById('wrap');
+var resetBtn = document.getElementById('reset');
+var scale = 1, transX = 0, transY = 0;
+var lastScale = 1, startDist = 0;
+var pinchOX = 0, pinchOY = 0;
+var isPanning = false;
+var panStartX = 0, panStartY = 0, panStartTX = 0, panStartTY = 0;
+var lastTap = 0;
 
-function dist(t) {{
+function resetZoom() {{
+  scale = 1; transX = 0; transY = 0;
+  img.style.transform = 'translate(0px,0px) scale(1)';
+  resetBtn.style.display = 'none';
+}}
+
+function clamp(val, mn, mx) {{ return Math.min(mx, Math.max(mn, val)); }}
+
+function applyTransform() {{
+  var baseW = wrap.offsetWidth;
+  var baseH = img.offsetHeight > 0 ? img.offsetHeight : baseW * 0.4;
+  var minTX = Math.min(0, baseW  - baseW  * scale);
+  var minTY = Math.min(0, baseH  - baseH  * scale);
+  transX = clamp(transX, minTX, 0);
+  transY = clamp(transY, minTY, 0);
+  img.style.transform = 'translate(' + transX + 'px,' + transY + 'px) scale(' + scale + ')';
+  resetBtn.style.display = scale > 1.05 ? 'block' : 'none';
+}}
+
+function touchDist(t) {{
   var dx = t[0].clientX - t[1].clientX;
   var dy = t[0].clientY - t[1].clientY;
   return Math.sqrt(dx*dx + dy*dy);
 }}
-function midpoint(t) {{
-  return {{
-    x: (t[0].clientX + t[1].clientX) / 2,
-    y: (t[0].clientY + t[1].clientY) / 2
-  }};
-}}
 
 img.addEventListener('touchstart', function(e) {{
+  e.preventDefault();
+  var now = Date.now();
+  if (e.touches.length === 1 && (now - lastTap) < 300) {{ resetZoom(); return; }}
+  lastTap = now;
   if (e.touches.length === 2) {{
-    e.preventDefault();
-    startDist  = dist(e.touches);
-    lastScale  = scale;
-    var mid    = midpoint(e.touches);
-    var rect   = img.getBoundingClientRect();
-    originX    = mid.x - rect.left;
-    originY    = mid.y - rect.top;
+    isPanning = false;
+    startDist = touchDist(e.touches);
+    lastScale = scale;
+    var rect = wrap.getBoundingClientRect();
+    var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+    var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+    pinchOX = (midX - transX) / scale;
+    pinchOY = (midY - transY) / scale;
+  }} else if (e.touches.length === 1 && scale > 1.05) {{
+    isPanning = true;
+    panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
+    panStartTX = transX; panStartTY = transY;
   }}
-}}, {{ passive: false }});
+}}, {{passive: false}});
 
 img.addEventListener('touchmove', function(e) {{
+  e.preventDefault();
   if (e.touches.length === 2) {{
-    e.preventDefault();
-    var newDist = dist(e.touches);
-    scale = Math.min(Math.max(lastScale * (newDist / startDist), 1), 8);
-    img.style.transformOrigin = originX + 'px ' + originY + 'px';
-    img.style.transform = 'scale(' + scale + ')';
+    var newScale = clamp(lastScale * (touchDist(e.touches) / startDist), 1, 6);
+    transX = transX + pinchOX * (scale - newScale);
+    transY = transY + pinchOY * (scale - newScale);
+    scale = newScale;
+    applyTransform();
+  }} else if (e.touches.length === 1 && isPanning) {{
+    transX = panStartTX + (e.touches[0].clientX - panStartX);
+    transY = panStartTY + (e.touches[0].clientY - panStartY);
+    applyTransform();
   }}
-}}, {{ passive: false }});
+}}, {{passive: false}});
 
 img.addEventListener('touchend', function(e) {{
-  if (scale < 1.05) {{
-    scale = 1;
-    img.style.transform = 'scale(1)';
-  }}
+  isPanning = false;
+  if (scale < 1.05) resetZoom();
 }});
 </script>
 </body>
-</html>
-""", height=360)
+</html>""", height=380)
 
-            # ── Métriques sous le graphique ────────────────────────────────────
+            # ── Métriques sous le graphique — contraste élevé ──────────────────
+            st.markdown("""
+            <style>
+            div[data-testid="metric-container"] {
+                background-color: #1e1e1e;
+                border: 1px solid #444;
+                border-radius: 10px;
+                padding: 12px;
+                text-align: center;
+            }
+            div[data-testid="metric-container"] label {
+                color: #aaaaaa !important;
+                font-size: 0.85rem !important;
+            }
+            div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+                color: #ffffff !important;
+                font-size: 1.4rem !important;
+                font-weight: bold !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             col1, col2, col3 = st.columns(3)
             col1.metric("⚡ Qmax",   f"{metrics['debit_max_mL_s']} mL/s")
             col2.metric("⏱️ Durée",  f"{metrics['duree_s']} s")
