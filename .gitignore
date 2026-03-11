@@ -1,0 +1,21 @@
+# dossiers locaux
+12-Projet_miction/calibration_sounds/
+12-Projet_miction/20_fev
+12-Projet_miction/deleted_sounds/
+12-Projet_miction/sons_tests/
+12-Projet_miction/tests_urine/
+# audio/
+# *.wav
+
+# fichiers audio
+# *.wav
+# *.mp3
+
+# python
+__pycache__/
+# *.pyc
+
+# VS Code
+# .vscode/
+.env/
+data/
