@@ -21,9 +21,6 @@ st.markdown("""
 .stApp { background-color: #0e0e0e; }
 h1 { color: white; text-align: center; }
 
-/* ✅ Zoom pinch Android — autorise le pinch-zoom sur tous les éléments */
-* { touch-action: pan-x pan-y pinch-zoom !important; }
-
 /* Cache le bouton zoom — inutilisable sur mobile */
 /* button[title="View fullscreen"] {
     display: none !important;
@@ -31,21 +28,54 @@ h1 { color: white; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# ✅ Force le viewport pour autoriser le zoom sur Android
+# ✅ MutationObserver — surveille et réécrase en continu ce que Streamlit impose
+# Nécessaire sur Android Chrome qui respecte strictement user-scalable=no et touch-action:none
 st.markdown("""
 <script>
 (function() {
-  var vp = document.querySelector('meta[name="viewport"]');
-  if (vp) {
-    vp.setAttribute('content',
-      'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=5.0'
-    );
-  } else {
-    var meta = document.createElement('meta');
-    meta.name = 'viewport';
-    meta.content = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=5.0';
-    document.head.appendChild(meta);
+  var VIEWPORT_CONTENT = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=10.0';
+
+  function forceZoom() {
+    // 1. Corrige la balise viewport
+    var vp = document.querySelector('meta[name="viewport"]');
+    if (vp) {
+      if (vp.getAttribute('content') !== VIEWPORT_CONTENT) {
+        vp.setAttribute('content', VIEWPORT_CONTENT);
+      }
+    } else {
+      var meta = document.createElement('meta');
+      meta.name = 'viewport';
+      meta.content = VIEWPORT_CONTENT;
+      document.head.appendChild(meta);
+    }
+
+    // 2. Supprime touch-action:none sur tous les éléments (Streamlit en injecte)
+    var allElements = document.querySelectorAll('*');
+    for (var i = 0; i < allElements.length; i++) {
+      var el = allElements[i];
+      var ta = el.style.touchAction;
+      if (ta === 'none' || ta === 'pan-x' || ta === 'pan-y') {
+        el.style.touchAction = 'auto';
+      }
+    }
   }
+
+  // Lance une première fois
+  forceZoom();
+
+  // MutationObserver : relance à chaque modification du DOM par Streamlit
+  var observer = new MutationObserver(function(mutations) {
+    forceZoom();
+  });
+  observer.observe(document.documentElement, {
+    attributes: true,
+    childList: true,
+    subtree: true,
+    attributeFilter: ['style', 'content']
+  });
+
+  // Sécurité : relance aussi toutes les 500ms au cas où
+  setInterval(forceZoom, 500);
 })();
 </script>
 """, unsafe_allow_html=True)
