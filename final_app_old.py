@@ -20,11 +20,11 @@ st.markdown("""
 <style>
 .stApp { background-color: #0e0e0e; }
 h1 { color: white; text-align: center; }
-
+            
 /* Cache le bouton zoom — inutilisable sur mobile */
 /* button[title="View fullscreen"] {
     display: none !important;
-} */
+} */           
 </style>
 """, unsafe_allow_html=True)
 
@@ -35,15 +35,12 @@ st.markdown("""
 </p>
 """, unsafe_allow_html=True)
 
-# ── Placeholder graphique AVANT le composant audio (position haute) ──────────
-graph_placeholder = st.empty()
-
 # ── HTML du composant audio ───────────────────────────────────────────────────
 COMPONENT_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -116,12 +113,6 @@ COMPONENT_HTML = """
 <div id="warning">⚠️ Arrêt automatique à 60s</div>
 
 <script>
-// ── Autoriser le zoom pinch sur la page parent ────────────────────────────────
-try {
-  var vp = window.parent.document.querySelector('meta[name="viewport"]');
-  if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0');
-} catch(e) {}
-
 // ── Protocole Streamlit Component ─────────────────────────────────────────────
 (function () {
   function sendToStreamlit(type, data) {
@@ -239,11 +230,12 @@ function stopRecording() {
       var sr = audioCtx ? audioCtx.sampleRate : 44100;
       var wavBlob = buildWAV(pcmChunks, sr);
 
+      // Conversion Blob → base64 puis envoi à Python via Streamlit
       var reader = new FileReader();
       reader.onload = function (e) {
-        var base64wav = e.target.result.split(',')[1];
-        // ✅ Message neutre — disparaît visuellement une fois le graphique affiché
-        document.getElementById('status').textContent = '✅ ' + formatTime(savedSeconds) + ' enregistrées';
+        var base64wav = e.target.result.split(',')[1]; // retire le préfixe data:audio/wav;base64,
+        document.getElementById('status').textContent =
+          '✅ ' + formatTime(savedSeconds) + ' — Analyse en cours...';
         window.Streamlit.setComponentValue(base64wav);
       };
       reader.readAsDataURL(wavBlob);
@@ -272,11 +264,11 @@ function buildWAV(chunks, sampleRate) {
     int16[i] = s < 0 ? s * 32768 : s * 32767;
   }
 
-  var numChannels   = 1;
+  var numChannels  = 1;
   var bitsPerSample = 16;
-  var byteRate      = sampleRate * numChannels * bitsPerSample / 8;
-  var blockAlign    = numChannels * bitsPerSample / 8;
-  var dataSize      = int16.byteLength;
+  var byteRate  = sampleRate * numChannels * bitsPerSample / 8;
+  var blockAlign = numChannels * bitsPerSample / 8;
+  var dataSize  = int16.byteLength;
 
   var buf  = new ArrayBuffer(44 + dataSize);
   var view = new DataView(buf);
@@ -291,10 +283,10 @@ function buildWAV(chunks, sampleRate) {
   ws(12, 'fmt ');
   view.setUint32(16, 16, true);
   view.setUint16(20, 1,  true);
-  view.setUint16(22, numChannels,   true);
-  view.setUint32(24, sampleRate,    true);
-  view.setUint32(28, byteRate,      true);
-  view.setUint16(32, blockAlign,    true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate,  true);
+  view.setUint32(28, byteRate,    true);
+  view.setUint16(32, blockAlign,  true);
   view.setUint16(34, bitsPerSample, true);
   ws(36, 'data');
   view.setUint32(40, dataSize, true);
@@ -336,7 +328,6 @@ if wav_base64:
         tmp_path = tmp.name
 
     try:
-        # ── Spinner affiché pendant l'analyse, disparaît automatiquement après ──
         with st.spinner("🔬 Analyse en cours..."):
             times_final, debits_final, metrics, masque_miction, debits = predict_flow_curve_new(
                 model,
@@ -345,49 +336,48 @@ if wav_base64:
                 window_length=0
             )
 
-        # ── Graphique dans le placeholder en haut de page ─────────────────────
-        with graph_placeholder.container():
-            fig, ax = plt.subplots(figsize=(10, 4))
-            fig.patch.set_facecolor('#1a1a1a')
-            ax.set_facecolor('#1a1a1a')
+        # ── Graphique ─────────────────────────────────────────────────────────
+        fig, ax = plt.subplots(figsize=(10, 4))
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.set_facecolor('#1a1a1a')
 
-            ax.fill_between(times_final, debits_final, alpha=0.25, color="steelblue")
-            ax.plot(times_final, debits_final, color="steelblue", linewidth=2, label="Débit (mL/s)")
-            ax.axhline(
-                metrics["debit_max_mL_s"], color="red", linestyle="--",
-                linewidth=1, label=f"Qmax = {metrics['debit_max_mL_s']} mL/s"
-            )
+        ax.fill_between(times_final, debits_final, alpha=0.25, color="steelblue")
+        ax.plot(times_final, debits_final, color="steelblue", linewidth=2, label="Débit (mL/s)")
+        ax.axhline(
+            metrics["debit_max_mL_s"], color="red", linestyle="--",
+            linewidth=1, label=f"Qmax = {metrics['debit_max_mL_s']} mL/s"
+        )
 
-            ax.set_xlabel("Temps (s)", color="white")
-            ax.set_ylabel("Débit (mL/s)", color="white")
-            ax.set_title("Uroflowmétrie acoustique", color="white")
-            ax.legend(facecolor="#2a2a2a", labelcolor="white")
-            ax.grid(True, alpha=0.3)
-            ax.tick_params(colors="white")
-            for spine in ax.spines.values():
-                spine.set_edgecolor("#444")
+        ax.set_xlabel("Temps (s)", color="white")
+        ax.set_ylabel("Débit (mL/s)", color="white")
+        ax.set_title("Uroflowmétrie acoustique", color="white")
+        ax.legend(facecolor="#2a2a2a", labelcolor="white")
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(colors="white")
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#444")
 
-            textstr = (
-                f"Qmax  = {metrics['debit_max_mL_s']} mL/s\n"
-                f"T mic = {metrics['duree_s']} s\n"
-                f"Vol   = {metrics['volume_total_mL']} mL"
-            )
-            ax.text(
-                0.98, 0.95, textstr, transform=ax.transAxes,
-                verticalalignment="top", horizontalalignment="right",
-                bbox=dict(boxstyle="round", facecolor="#2a2a2a", alpha=0.9, edgecolor="#555"),
-                fontsize=9, family="monospace", color="white"
-            )
+        textstr = (
+            f"Qmax  = {metrics['debit_max_mL_s']} mL/s\n"
+            f"T mic = {metrics['duree_s']} s\n"
+            f"Vol   = {metrics['volume_total_mL']} mL"
+        )
+        ax.text(
+            0.98, 0.95, textstr, transform=ax.transAxes,
+            verticalalignment="top", horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="#2a2a2a", alpha=0.9, edgecolor="#555"),
+            fontsize=9, family="monospace", color="white"
+        )
 
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
 
-            # ── Métriques ─────────────────────────────────────────────────────
-            col1, col2, col3 = st.columns(3)
-            col1.metric("⚡ Qmax",   f"{metrics['debit_max_mL_s']} mL/s")
-            col2.metric("⏱️ Durée",  f"{metrics['duree_s']} s")
-            col3.metric("💧 Volume", f"{metrics['volume_total_mL']} mL")
+        # ── Métriques ─────────────────────────────────────────────────────────
+        col1, col2, col3 = st.columns(3)
+        col1.metric("⚡ Qmax",    f"{metrics['debit_max_mL_s']} mL/s")
+        col2.metric("⏱️ Durée",   f"{metrics['duree_s']} s")
+        col3.metric("💧 Volume",  f"{metrics['volume_total_mL']} mL")
 
     except Exception as e:
         st.error(f"Erreur lors de l'analyse : {e}")
