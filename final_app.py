@@ -81,8 +81,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div id="top"></div>
-<h1 style="color:#ffffff;">🎙️ Uroflow Meter</h1>
+<div id="top" style="height:1px;"></div>
+<h1 style="color:#cccccc;">🎙️ Uroflow Meter</h1>
 <p style="color:#555; text-align:center; font-size:0.85rem; margin-top:-10px;">
     powered by Compt'Gouttes
 </p>
@@ -467,7 +467,7 @@ if wav_base64:
         volume = metrics['volume_total_mL']
 
         # ✅ Scroll automatique vers le haut dès que le graphique est prêt
-        st.markdown('<script>window.parent.document.getElementById("top").scrollIntoView({behavior:"smooth"});</script>', unsafe_allow_html=True)
+        st.markdown('<script>window.parent.scrollTo({top:0, behavior:"smooth"});</script>', unsafe_allow_html=True)
 
         with graph_placeholder.container():
             components.html(f"""<!DOCTYPE html>
