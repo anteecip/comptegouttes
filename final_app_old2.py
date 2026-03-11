@@ -21,33 +21,11 @@ st.markdown("""
 .stApp { background-color: #0e0e0e; }
 h1 { color: white; text-align: center; }
 
-/* ✅ Zoom pinch Android — autorise le pinch-zoom sur tous les éléments */
-* { touch-action: pan-x pan-y pinch-zoom !important; }
-
 /* Cache le bouton zoom — inutilisable sur mobile */
 /* button[title="View fullscreen"] {
     display: none !important;
 } */
 </style>
-""", unsafe_allow_html=True)
-
-# ✅ Force le viewport pour autoriser le zoom sur Android
-st.markdown("""
-<script>
-(function() {
-  var vp = document.querySelector('meta[name="viewport"]');
-  if (vp) {
-    vp.setAttribute('content',
-      'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=5.0'
-    );
-  } else {
-    var meta = document.createElement('meta');
-    meta.name = 'viewport';
-    meta.content = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=5.0';
-    document.head.appendChild(meta);
-  }
-})();
-</script>
 """, unsafe_allow_html=True)
 
 st.markdown("""
@@ -65,9 +43,9 @@ COMPONENT_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=5.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; touch-action: pan-x pan-y pinch-zoom; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: #0e0e0e;
     color: white;
@@ -99,7 +77,6 @@ COMPONENT_HTML = """
     transition: all 0.3s;
     margin: 20px 0;
     -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
   }
   #record-btn.recording {
     background: radial-gradient(circle, #ffaa00, #cc6600);
@@ -139,25 +116,11 @@ COMPONENT_HTML = """
 <div id="warning">⚠️ Arrêt automatique à 60s</div>
 
 <script>
-// ✅ Force le viewport Android depuis l'iframe
-(function() {
-  try {
-    var vp = window.parent.document.querySelector('meta[name="viewport"]');
-    if (vp) {
-      vp.setAttribute('content',
-        'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=5.0'
-      );
-    }
-  } catch(e) {}
-
-  // Passive listeners pour ne pas bloquer le pinch sur Android
-  document.addEventListener('touchstart', function(e) {}, { passive: true });
-  document.addEventListener('touchmove',  function(e) {}, { passive: true });
-  try {
-    window.parent.document.addEventListener('touchstart', function(e) {}, { passive: true });
-    window.parent.document.addEventListener('touchmove',  function(e) {}, { passive: true });
-  } catch(e) {}
-})();
+// ── Autoriser le zoom pinch sur la page parent ────────────────────────────────
+try {
+  var vp = window.parent.document.querySelector('meta[name="viewport"]');
+  if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0');
+} catch(e) {}
 
 // ── Protocole Streamlit Component ─────────────────────────────────────────────
 (function () {
@@ -279,6 +242,7 @@ function stopRecording() {
       var reader = new FileReader();
       reader.onload = function (e) {
         var base64wav = e.target.result.split(',')[1];
+        // ✅ Message neutre — disparaît visuellement une fois le graphique affiché
         document.getElementById('status').textContent = '✅ ' + formatTime(savedSeconds) + ' enregistrées';
         window.Streamlit.setComponentValue(base64wav);
       };
@@ -372,23 +336,16 @@ if wav_base64:
         tmp_path = tmp.name
 
     try:
-        # ✅ Affiche "Analyse en cours" dans le placeholder pendant le calcul
-        with graph_placeholder.container():
-            st.markdown("""
-            <div style="text-align:center; padding: 30px 0;">
-                <p style="color:#ff9900; font-size:1.2rem;">🔬 Analyse en cours...</p>
-                <p style="color:#555; font-size:0.85rem;">Veuillez patienter</p>
-            </div>
-            """, unsafe_allow_html=True)
+        # ── Spinner affiché pendant l'analyse, disparaît automatiquement après ──
+        with st.spinner("🔬 Analyse en cours..."):
+            times_final, debits_final, metrics, masque_miction, debits = predict_flow_curve_new(
+                model,
+                tmp_path,
+                seuil_score=0.6,
+                window_length=0
+            )
 
-        times_final, debits_final, metrics, masque_miction, debits = predict_flow_curve_new(
-            model,
-            tmp_path,
-            seuil_score=0.6,
-            window_length=0
-        )
-
-        # ✅ Remplace "Analyse en cours" par le graphique dès que prêt
+        # ── Graphique dans le placeholder en haut de page ─────────────────────
         with graph_placeholder.container():
             fig, ax = plt.subplots(figsize=(10, 4))
             fig.patch.set_facecolor('#1a1a1a')
@@ -433,7 +390,6 @@ if wav_base64:
             col3.metric("💧 Volume", f"{metrics['volume_total_mL']} mL")
 
     except Exception as e:
-        graph_placeholder.empty()
         st.error(f"Erreur lors de l'analyse : {e}")
     finally:
         os.unlink(tmp_path)
