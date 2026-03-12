@@ -82,7 +82,7 @@ st.markdown("""
 
 st.markdown("""
 <div id="top" style="height:1px;"></div>
-<h1 style="color:#cccccc;">🎙️ Uroflow Meter</h1>
+<h1 style="color:#cccccc;">🎙️ UroDev Meter</h1>
 <p style="color:#555; text-align:center; font-size:0.85rem; margin-top:-10px;">
     powered by Compt'Gouttes
 </p>
