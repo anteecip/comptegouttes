@@ -522,7 +522,7 @@ if wav_base64:
     <div class="metric-unit">mL/s</div>
   </div>
   <div class="metric-box">
-    <div class="metric-label">⏱️ Durée</div>
+    <div class="metric-label">⏱️ Durée Réelle</div>
     <div class="metric-value">{duree}</div>
     <div class="metric-unit">s</div>
   </div>

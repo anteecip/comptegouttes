@@ -81,7 +81,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<h1>🎙️ Uroflow Meter</h1>
+<div id="top" style="height:1px;"></div>
+<h1 style="color:#cccccc;">🎙️ Uroflow Meter</h1>
 <p style="color:#555; text-align:center; font-size:0.85rem; margin-top:-10px;">
     powered by Compt'Gouttes
 </p>
@@ -384,7 +385,7 @@ audio_recorder = components.declare_component("audio_recorder", path=str(compone
 wav_base64 = audio_recorder(key="recorder", default=None, height=500)
 
 # ── Chargement du modèle (mis en cache) ──────────────────────────────────────
-MODEL_PATH = Path(__file__).parent / "models" / "final_model_RandomForest_best_init.pkl"
+MODEL_PATH = Path(__file__).parent / "models" / "final_model_KNN_SelectK_init.pkl"
 
 @st.cache_resource
 def load_model():
@@ -418,49 +419,202 @@ if wav_base64:
             window_length=0
         )
 
-        # ✅ Remplace "Analyse en cours" par le graphique dès que prêt
+        # ✅ Rendu matplotlib → base64 PNG pour l'afficher dans components.html
+        #    (iframe = contrôle total sur touch-action → zoom pinch Android garanti)
+        import io
+        fig, ax = plt.subplots(figsize=(10, 4))
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.set_facecolor('#1a1a1a')
+
+        ax.fill_between(times_final, debits_final, alpha=0.25, color="steelblue")
+        ax.plot(times_final, debits_final, color="steelblue", linewidth=2, label="Débit (mL/s)")
+        ax.axhline(
+            metrics["debit_max_mL_s"], color="red", linestyle="--",
+            linewidth=1, label=f"Qmax = {metrics['debit_max_mL_s']} mL/s"
+        )
+        ax.set_xlabel("Temps (s)", color="white")
+        ax.set_ylabel("Débit (mL/s)", color="white")
+        ax.set_title("Uroflowmétrie acoustique", color="white")
+        ax.legend(facecolor="#2a2a2a", labelcolor="white")
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(colors="white")
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#444")
+        textstr = (
+            f"Qmax  = {metrics['debit_max_mL_s']} mL/s\n"
+            f"T mic = {metrics['duree_s']} s\n"
+            f"Vol   = {metrics['volume_total_mL']} mL"
+        )
+        ax.text(
+            0.98, 0.95, textstr, transform=ax.transAxes,
+            verticalalignment="top", horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="#2a2a2a", alpha=0.9, edgecolor="#555"),
+            fontsize=9, family="monospace", color="white"
+        )
+        plt.tight_layout()
+
+        # Sauvegarde en mémoire → base64
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=150)
+        plt.close(fig)
+        buf.seek(0)
+        img_b64 = base64.b64encode(buf.read()).decode("utf-8")
+
+        # ✅ Graphique + métriques dans le même components.html
+        #    → scroll libre, zoom pinch, pas de gap entre graphique et métriques
+        qmax   = metrics['debit_max_mL_s']
+        duree  = metrics['duree_s']
+        volume = metrics['volume_total_mL']
+
+        # ✅ Scroll automatique vers le haut dès que le graphique est prêt
+        st.markdown('<script>window.parent.scrollTo({top:0, behavior:"smooth"});</script>', unsafe_allow_html=True)
+
         with graph_placeholder.container():
-            fig, ax = plt.subplots(figsize=(10, 4))
-            fig.patch.set_facecolor('#1a1a1a')
-            ax.set_facecolor('#1a1a1a')
+            components.html(f"""<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=1.0, maximum-scale=10.0">
+<style>
+  * {{ margin:0; padding:0; box-sizing:border-box; }}
+  html, body {{ background:#0e0e0e; font-family:Arial,sans-serif; width:100%; }}
 
-            ax.fill_between(times_final, debits_final, alpha=0.25, color="steelblue")
-            ax.plot(times_final, debits_final, color="steelblue", linewidth=2, label="Débit (mL/s)")
-            ax.axhline(
-                metrics["debit_max_mL_s"], color="red", linestyle="--",
-                linewidth=1, label=f"Qmax = {metrics['debit_max_mL_s']} mL/s"
-            )
+  /* ── Barre supérieure ── */
+  #topbar {{ display:flex; justify-content:space-between; align-items:center;
+             padding:4px 8px; }}
+  #hint   {{ color:#555; font-size:0.72rem; }}
+  #reset  {{ background:#2a2a2a; color:#ccc; border:1px solid #555;
+             border-radius:6px; padding:4px 10px; font-size:0.72rem;
+             cursor:pointer; display:none; touch-action:manipulation; }}
 
-            ax.set_xlabel("Temps (s)", color="white")
-            ax.set_ylabel("Débit (mL/s)", color="white")
-            ax.set_title("Uroflowmétrie acoustique", color="white")
-            ax.legend(facecolor="#2a2a2a", labelcolor="white")
-            ax.grid(True, alpha=0.3)
-            ax.tick_params(colors="white")
-            for spine in ax.spines.values():
-                spine.set_edgecolor("#444")
+  /* ── Zone graphique zoomable ── */
+  #wrap {{ overflow:hidden; width:100%; touch-action:none; }}
+  #graph {{ width:100%; display:block; transform-origin:0 0;
+            user-select:none; will-change:transform; }}
 
-            textstr = (
-                f"Qmax  = {metrics['debit_max_mL_s']} mL/s\n"
-                f"T mic = {metrics['duree_s']} s\n"
-                f"Vol   = {metrics['volume_total_mL']} mL"
-            )
-            ax.text(
-                0.98, 0.95, textstr, transform=ax.transAxes,
-                verticalalignment="top", horizontalalignment="right",
-                bbox=dict(boxstyle="round", facecolor="#2a2a2a", alpha=0.9, edgecolor="#555"),
-                fontsize=9, family="monospace", color="white"
-            )
+  /* ── Métriques collées sous le graphique ── */
+  #metrics {{ display:flex; justify-content:space-around;
+              padding:10px 8px 8px 8px; touch-action:pan-y; }}
+  .metric-box {{
+    flex:1; margin:0 4px;
+    background:#1a1a1a; border:1px solid #555; border-radius:10px;
+    padding:10px 6px; text-align:center;
+  }}
+  .metric-label {{ color:#888; font-size:0.72rem; margin-bottom:4px; }}
+  .metric-value {{ color:#ffffff; font-size:1.3rem; font-weight:bold; }}
+  .metric-unit  {{ color:#aaa;   font-size:0.7rem; }}
+</style>
+</head>
+<body>
 
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
+<div id="topbar">
+  <span id="hint">👌 Pincez pour zoomer · 1 doigt déplace · 2× tap reset</span>
+  <button id="reset" onclick="resetZoom()">↩ Reset</button>
+</div>
 
-            # ── Métriques ─────────────────────────────────────────────────────
-            col1, col2, col3 = st.columns(3)
-            col1.metric("⚡ Qmax",   f"{metrics['debit_max_mL_s']} mL/s")
-            col2.metric("⏱️ Durée",  f"{metrics['duree_s']} s")
-            col3.metric("💧 Volume", f"{metrics['volume_total_mL']} mL")
+<div id="wrap">
+  <img id="graph" src="data:image/png;base64,{img_b64}" draggable="false">
+</div>
+
+<div id="metrics">
+  <div class="metric-box">
+    <div class="metric-label">⚡ Qmax</div>
+    <div class="metric-value">{qmax}</div>
+    <div class="metric-unit">mL/s</div>
+  </div>
+  <div class="metric-box">
+    <div class="metric-label">⏱️ Durée Réelle</div>
+    <div class="metric-value">{duree}</div>
+    <div class="metric-unit">s</div>
+  </div>
+  <div class="metric-box">
+    <div class="metric-label">💧 Volume</div>
+    <div class="metric-value">{volume}</div>
+    <div class="metric-unit">mL</div>
+  </div>
+</div>
+
+<script>
+var img      = document.getElementById('graph');
+var wrap     = document.getElementById('wrap');
+var resetBtn = document.getElementById('reset');
+var scale = 1, transX = 0, transY = 0;
+var lastScale = 1, startDist = 0;
+var pinchOX = 0, pinchOY = 0;
+var isPanning = false;
+var panStartX = 0, panStartY = 0, panStartTX = 0, panStartTY = 0;
+var lastTap = 0;
+
+function resetZoom() {{
+  scale = 1; transX = 0; transY = 0;
+  img.style.transform = 'translate(0px,0px) scale(1)';
+  resetBtn.style.display = 'none';
+  wrap.style.touchAction = 'pan-y';   // ✅ re-autorise le scroll page
+}}
+
+function clamp(v, mn, mx) {{ return Math.min(mx, Math.max(mn, v)); }}
+
+function applyTransform() {{
+  var baseW = wrap.offsetWidth;
+  var baseH = img.offsetHeight > 0 ? img.offsetHeight : baseW * 0.4;
+  transX = clamp(transX, Math.min(0, baseW - baseW * scale), 0);
+  transY = clamp(transY, Math.min(0, baseH - baseH * scale), 0);
+  img.style.transform = 'translate(' + transX + 'px,' + transY + 'px) scale(' + scale + ')';
+  var zoomed = scale > 1.05;
+  resetBtn.style.display  = zoomed ? 'block' : 'none';
+  wrap.style.touchAction  = zoomed ? 'none'  : 'pan-y';  // ✅ scroll libre si pas zoomé
+}}
+
+function touchDist(t) {{
+  var dx = t[0].clientX - t[1].clientX;
+  var dy = t[0].clientY - t[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}}
+
+wrap.addEventListener('touchstart', function(e) {{
+  var now = Date.now();
+  if (e.touches.length === 1 && (now - lastTap) < 300) {{ resetZoom(); return; }}
+  lastTap = now;
+  if (e.touches.length === 2) {{
+    e.preventDefault();
+    isPanning = false;
+    startDist = touchDist(e.touches);
+    lastScale = scale;
+    var rect = wrap.getBoundingClientRect();
+    var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+    var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+    pinchOX = (midX - transX) / scale;
+    pinchOY = (midY - transY) / scale;
+  }} else if (e.touches.length === 1 && scale > 1.05) {{
+    e.preventDefault();
+    isPanning = true;
+    panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
+    panStartTX = transX; panStartTY = transY;
+  }}
+}}, {{passive: false}});
+
+wrap.addEventListener('touchmove', function(e) {{
+  if (e.touches.length === 2) {{
+    e.preventDefault();
+    var newScale = clamp(lastScale * (touchDist(e.touches) / startDist), 1, 6);
+    transX = transX + pinchOX * (scale - newScale);
+    transY = transY + pinchOY * (scale - newScale);
+    scale = newScale;
+    applyTransform();
+  }} else if (e.touches.length === 1 && isPanning) {{
+    e.preventDefault();
+    transX = panStartTX + (e.touches[0].clientX - panStartX);
+    transY = panStartTY + (e.touches[0].clientY - panStartY);
+    applyTransform();
+  }}
+}}, {{passive: false}});
+
+wrap.addEventListener('touchend', function() {{
+  isPanning = false;
+  if (scale < 1.05) resetZoom();
+}});
+</script>
+</body>
+</html>""", height=480)
 
     except Exception as e:
         graph_placeholder.empty()
