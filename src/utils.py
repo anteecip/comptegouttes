@@ -257,8 +257,8 @@ def predict_flow_curve_new(
 ):
     y, sr = librosa.load(wav_path, sr=sr)
 
-    #test normalisation
-    y = librosa.util.normalize(y)
+    #test normalisation désactivé le 15 mars 26
+    # y = librosa.util.normalize(y)
 
     # Calcul du RMS global de tout l'enregistrement (une seule fois)
     rms_global = librosa.feature.rms(y=y)[0].mean()
