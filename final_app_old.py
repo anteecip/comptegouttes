@@ -169,22 +169,6 @@ COMPONENT_HTML = """
 <div id="status">Appuyez pour démarrer</div>
 <div id="warning">⚠️ Arrêt automatique à 60s</div>
 
-<!-- ✅ Message "Analyse en cours" affiché instantanément côté JS -->
-<div id="analyse-msg" style="
-  display:none;
-  margin-top:16px;
-  padding:12px 20px;
-  background:#1a1a00;
-  border:1px solid #ff9900;
-  border-radius:10px;
-  text-align:center;
-  color:#ff9900;
-  font-size:1rem;
-">
-  🔬 Analyse en cours...<br>
-  <span style="color:#555; font-size:0.8rem;">Le serveur démarre, veuillez patienter</span>
-</div>
-
 <script>
 // ✅ Force le viewport Android depuis l'iframe
 (function() {
@@ -286,7 +270,6 @@ function startRecording() {
       btn.textContent = 'STOP';
       document.getElementById('status').textContent = 'Enregistrement en cours...';
       document.getElementById('warning').style.display = 'none';
-      document.getElementById('analyse-msg').style.display = 'none';
       document.getElementById('timer').textContent = '00:00';
 
       timerInterval = setInterval(function () {
@@ -327,9 +310,7 @@ function stopRecording() {
       var reader = new FileReader();
       reader.onload = function (e) {
         var base64wav = e.target.result.split(',')[1];
-        // ✅ Affichage IMMÉDIAT côté JS — indépendant du réveil du serveur Streamlit
         document.getElementById('status').textContent = '✅ ' + formatTime(savedSeconds) + ' enregistrées';
-        document.getElementById('analyse-msg').style.display = 'block';
         window.Streamlit.setComponentValue(base64wav);
       };
       reader.readAsDataURL(wavBlob);
@@ -541,7 +522,7 @@ if wav_base64:
     <div class="metric-unit">mL/s</div>
   </div>
   <div class="metric-box">
-    <div class="metric-label">⏱️ Durée</div>
+    <div class="metric-label">⏱️ Durée Réelle</div>
     <div class="metric-value">{duree}</div>
     <div class="metric-unit">s</div>
   </div>
